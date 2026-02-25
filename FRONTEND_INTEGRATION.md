@@ -22,6 +22,10 @@ Body (`multipart/form-data`):
 - `dogphoto` (file, required, jpg/png/webp, max 5MB)
 - `referralCode` (string, optional)
 
+Referral behavior:
+- If `referralCode` is provided, backend validates it during submit.
+- Invalid referral code => `400 Bad Request` with message `Invalid referral code.`
+
 Success response:
 - `201 Created`
 - Returns saved submission in `data`
@@ -163,6 +167,32 @@ Endpoint:
 Response:
 ```json
 { "ok": true }
+```
+
+## 7) Referral Code Validation (Optional frontend pre-check)
+
+Endpoint:
+- `GET /referral/validate?code=REFXXXX`
+
+Success response:
+```json
+{
+  "message": "Referral code is valid.",
+  "valid": true,
+  "data": {
+    "referrerName": "Arun T.",
+    "referralCode": "REFABC12345",
+    "referralUseCount": 5
+  }
+}
+```
+
+Invalid code response:
+```json
+{
+  "message": "Invalid referral code.",
+  "valid": false
+}
 ```
 
 ## Frontend Flow (Recommended)

@@ -206,6 +206,40 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/referral/validate', async (req, res, next) => {
+  try {
+    const code = String(req.query.code || '').trim().toUpperCase();
+    if (!code) {
+      return res.status(400).json({
+        message: 'Referral code is required.'
+      });
+    }
+
+    const referrer = await Submission.findOne({ referralCode: code })
+      .select('_id name referralCode referralUseCount')
+      .lean();
+
+    if (!referrer) {
+      return res.status(404).json({
+        message: 'Invalid referral code.',
+        valid: false
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Referral code is valid.',
+      valid: true,
+      data: {
+        referrerName: referrer.name,
+        referralCode: referrer.referralCode,
+        referralUseCount: referrer.referralUseCount
+      }
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 app.get('/spots/status', async (_req, res, next) => {
   try {
     const counter = await EnrollmentCounter.findOne({ key: ENROLLMENT_COUNTER_KEY }).lean();
@@ -330,6 +364,16 @@ app.post('/submit', upload.single('dogphoto'), async (req, res, next) => {
       });
     }
 
+    const normalizedReferralCode = referralCode ? String(referralCode).trim().toUpperCase() : null;
+    if (normalizedReferralCode) {
+      const referrerExists = await Submission.exists({ referralCode: normalizedReferralCode });
+      if (!referrerExists) {
+        return res.status(400).json({
+          message: 'Invalid referral code.'
+        });
+      }
+    }
+
     const uploadResult = await uploadToCloudinary(req.file.buffer);
 
     const submission = await Submission.create({
@@ -339,7 +383,7 @@ app.post('/submit', upload.single('dogphoto'), async (req, res, next) => {
       city,
       mail,
       dogsname,
-      referredByCode: referralCode ? String(referralCode).trim().toUpperCase() : null,
+      referredByCode: normalizedReferralCode,
       dogphoto: {
         publicId: uploadResult.public_id,
         url: uploadResult.secure_url,
