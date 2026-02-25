@@ -70,9 +70,7 @@ const submissionSchema = new mongoose.Schema(
     },
     referralCode: {
       type: String,
-      default: null,
-      unique: true,
-      sparse: true,
+      default: undefined,
       uppercase: true,
       trim: true
     },
@@ -128,6 +126,14 @@ const submissionSchema = new mongoose.Schema(
   },
   {
     timestamps: true
+  }
+);
+
+submissionSchema.index(
+  { referralCode: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { referralCode: { $type: 'string' } }
   }
 );
 
