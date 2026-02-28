@@ -469,25 +469,26 @@ app.post('/payment/success', async (req, res, next) => {
     }
 
     const { submissionId, razorpay_payment_id, razorpay_order_id } = req.body;
+    const normalizedSubmissionId = String(submissionId || '').trim();
     debugRequestContext('/payment/success', {
-      submissionId,
+      submissionId: normalizedSubmissionId,
       razorpay_payment_id,
       razorpay_order_id
     });
 
-    if (!submissionId || !razorpay_payment_id) {
+    if (!normalizedSubmissionId || !razorpay_payment_id) {
       return res.status(400).json({
         message: 'submissionId and razorpay_payment_id are required.'
       });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(submissionId)) {
+    if (!mongoose.Types.ObjectId.isValid(normalizedSubmissionId)) {
       return res.status(400).json({
         message: 'Invalid submissionId format.'
       });
     }
 
-    const submission = await Submission.findById(submissionId);
+    const submission = await Submission.findById(normalizedSubmissionId);
     debugRequestContext('/payment/success lookup', { found: Boolean(submission) });
     if (!submission) {
       return res.status(404).json({ message: 'Submission not found.' });
