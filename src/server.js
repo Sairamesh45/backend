@@ -94,6 +94,16 @@ const mailTransporter = smtpHost && smtpUser && smtpPass
     })
   : null;
 
+function sendMailInBackground(mailOptions, contextLabel) {
+  setImmediate(async () => {
+    try {
+      await mailTransporter.sendMail(mailOptions);
+    } catch (error) {
+      console.error(`[mail] ${contextLabel} failed:`, error.message);
+    }
+  });
+}
+
 function uploadToCloudinary(fileBuffer) {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
@@ -207,12 +217,12 @@ async function processReferralUsage(submission) {
       <p><strong>Total successful referrals:</strong> ${updatedReferrer.referralUseCount}</p>
     `;
 
-    await mailTransporter.sendMail({
+    sendMailInBackground({
       from: mailFrom,
       to: referrer.mail,
       subject,
       html
-    });
+    }, 'referral-used');
   }
 
   return {
@@ -562,16 +572,24 @@ app.post('/payment/success', async (req, res, next) => {
         <p>Thank you.</p>
       `;
 
-      await mailTransporter.sendMail({
+      sendMailInBackground({
         from: mailFrom,
         to: submission.mail,
         subject,
         html
+      }, 'payment-confirmation');
+
+      setImmediate(async () => {
+        try {
+          await Submission.findByIdAndUpdate(submission._id, {
+            $set: { confirmationSentAt: new Date() }
+          });
+        } catch (error) {
+          console.error('[mail] failed to persist confirmationSentAt:', error.message);
+        }
       });
 
-      submission.confirmationSentAt = new Date();
       emailSent = true;
-      await submission.save();
     }
 
     return res.status(200).json({
