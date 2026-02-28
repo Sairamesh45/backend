@@ -6,7 +6,7 @@ const cors = require('cors');
 const multer = require('multer');
 const mongoose = require('mongoose');
 const Razorpay = require('razorpay');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const cloudinary = require('cloudinary').v2;
 
 const Submission = require('./models/Submission');
@@ -76,28 +76,19 @@ const razorpayClient = razorpayKeyId && razorpayKeySecret
     })
   : null;
 
-const smtpUser = process.env.SMTP_USER;
-const smtpPass = process.env.SMTP_PASS;
-const smtpHost = process.env.SMTP_HOST;
-const smtpPort = Number(process.env.SMTP_PORT || 587);
-const smtpSecure = process.env.SMTP_SECURE === 'true';
-
-const mailTransporter = smtpHost && smtpUser && smtpPass
-  ? nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpSecure,
-      auth: {
-        user: smtpUser,
-        pass: smtpPass
-      }
-    })
-  : null;
+const resendApiKey = process.env.RESEND_API_KEY;
+const resendClient = resendApiKey ? new Resend(resendApiKey) : null;
 
 function sendMailInBackground(mailOptions, contextLabel) {
   setImmediate(async () => {
     try {
-      await mailTransporter.sendMail(mailOptions);
+      await resendClient.emails.send({
+        from: mailOptions.from,
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        html: mailOptions.html,
+        text: mailOptions.text
+      });
     } catch (error) {
       console.error(`[mail] ${contextLabel} failed:`, error.message);
     }
@@ -207,8 +198,8 @@ async function processReferralUsage(submission) {
     { new: true }
   );
 
-  if (mailTransporter) {
-    const mailFrom = process.env.MAIL_FROM || smtpUser;
+  if (resendClient) {
+    const mailFrom = process.env.MAIL_FROM;
     const subject = 'Congrats! Your referral code was used';
     const html = `
       <h2>Referral Update</h2>
@@ -551,31 +542,97 @@ app.post('/payment/success', async (req, res, next) => {
 
     let emailSent = false;
     if (!submission.confirmationSentAt) {
-      if (!mailTransporter) {
+      if (!resendClient) {
         return res.status(500).json({
-          message: 'SMTP email is not configured on the backend.'
+          message: 'Resend email is not configured on the backend.'
         });
       }
 
-      const mailFrom = process.env.MAIL_FROM || smtpUser;
-      const subject = 'Payment Confirmation - Dog Registration';
+      const mailFrom = process.env.MAIL_FROM;
+      const subject = `🐾 Payment Confirmed – Welcome to the MyPerro Family, ${submission.dogsname}!`;
+
+      const position = submission.cohortPosition || submission.cohortSlot || '';
+      const orderId = submission.paymentOrderId || razorpay_order_id || '';
+      const referralCodeFormatted = `${submission.dogsname || ''}-${position}`;
+
       const html = `
-        <h2>Payment Confirmation</h2>
-        <p>Hi ${submission.name},</p>
-        <p>Your payment was successful.</p>
-        <p><strong>Dog Name:</strong> ${submission.dogsname}</p>
-        <p><strong>Payment ID:</strong> ${razorpay_payment_id}</p>
-        <p><strong>Cohort:</strong> ${submission.cohortNumber}</p>
-        <p><strong>Position in Cohort:</strong> ${submission.cohortPosition || submission.cohortSlot}/${COHORT_SIZE}</p>
-        <p><strong>Your Referral Code:</strong> ${submission.referralCode}</p>
-        <p>Share this code with others to join upcoming cohorts.</p>
-        <p>Thank you.</p>
+        <div style="font-family: Arial, sans-serif; color: #222;">
+          <h2>🐾 Payment Confirmed – Welcome to the MyPerro Family, ${submission.dogsname}!</h2>
+          <p>Hi ${submission.name},</p>
+          <p>Great news — your payment was successful! We're thrilled to welcome <strong>${submission.dogsname}</strong> to the MyPerro community.</p>
+
+          <h3>Here's a summary of your order:</h3>
+          <table style="border-collapse: collapse; width: 100%; max-width:600px;">
+            <tr>
+              <td style="padding:8px; border:1px solid #eee;"><strong>Dog's Name</strong></td>
+              <td style="padding:8px; border:1px solid #eee;">${submission.dogsname}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px; border:1px solid #eee;"><strong>Payment ID</strong></td>
+              <td style="padding:8px; border:1px solid #eee;">${razorpay_payment_id}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px; border:1px solid #eee;"><strong>Order ID</strong></td>
+              <td style="padding:8px; border:1px solid #eee;">${orderId}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px; border:1px solid #eee;"><strong>Cohort</strong></td>
+              <td style="padding:8px; border:1px solid #eee;">${submission.cohortNumber || ''}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px; border:1px solid #eee;"><strong>Position in Cohort</strong></td>
+              <td style="padding:8px; border:1px solid #eee;">${position}${position ? '/' + COHORT_SIZE : ''}</td>
+            </tr>
+          </table>
+
+          <h3>🎁 Your Referral Code</h3>
+          <p>Share MyPerro with fellow dog lovers and earn rewards!</p>
+          <p style="font-size:18px; background:#f6f6f6; display:inline-block; padding:8px 12px; border-radius:4px;">${referralCodeFormatted}</p>
+
+          <h3>What's Next?</h3>
+          <p>Your MyPerro GPS collar is being prepared. You'll receive a shipping confirmation email with tracking details as soon as your order is on its way.</p>
+          <p>In the meantime, feel free to explore our app to set up your account and get ready for ${submission.dogsname}'s first adventure.</p>
+
+          <p>If you have any questions, don't hesitate to reach out to us at <a href="mailto:support@myperro.com">support@myperro.com</a>.</p>
+
+          <p>Thank you for trusting MyPerro to keep ${submission.dogsname} safe. 🐶</p>
+
+          <p>The MyPerro Team</p>
+
+          <p style="font-size:12px; color:#888;">© MyPerro — <a href="https://www.myperro.in">www.myperro.in</a></p>
+        </div>
       `;
+
+      const text = `🐾 Payment Confirmed – Welcome to the MyPerro Family, ${submission.dogsname}!
+
+Hi ${submission.name},
+
+Great news — your payment was successful! We're thrilled to welcome ${submission.dogsname} to the MyPerro community.
+
+Order summary:
+Dog's Name: ${submission.dogsname}
+Payment ID: ${razorpay_payment_id}
+Order ID: ${orderId}
+Cohort: ${submission.cohortNumber || ''}
+Position in Cohort: ${position}${position ? '/' + COHORT_SIZE : ''}
+
+Your Referral Code: ${referralCodeFormatted}
+
+What's Next?
+Your MyPerro GPS collar is being prepared. You'll receive a shipping confirmation email with tracking details as soon as your order is on its way.
+
+If you have any questions, reach out to support@myperro.com.
+
+Thank you for trusting MyPerro to keep ${submission.dogsname} safe.
+
+The MyPerro Team
+www.myperro.in`;
 
       sendMailInBackground({
         from: mailFrom,
         to: submission.mail,
         subject,
+        text,
         html
       }, 'payment-confirmation');
 
