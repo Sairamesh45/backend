@@ -14,6 +14,7 @@ const EnrollmentCounter = require('./models/EnrollmentCounter');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const DEBUG_PAYMENTS = process.env.DEBUG_PAYMENTS === 'true';
 
 const COHORT_SIZE = 20;
 const ENROLLMENT_COUNTER_KEY = 'cohort_enrollment';
@@ -42,6 +43,11 @@ mongoose
   .connect(mongoUri)
   .then(() => {
     console.log('Connected to MongoDB');
+    if (DEBUG_PAYMENTS) {
+      const dbName = mongoose.connection?.name;
+      const host = mongoose.connection?.host;
+      console.log(`[debug] mongoose connected: host=${host}, db=${dbName}`);
+    }
   })
   .catch((error) => {
     console.error('MongoDB connection failed:', error.message);
@@ -105,6 +111,22 @@ function uploadToCloudinary(fileBuffer) {
     );
 
     stream.end(fileBuffer);
+  });
+}
+
+function debugRequestContext(routeName, details) {
+  if (!DEBUG_PAYMENTS) {
+    return;
+  }
+
+  const dbName = mongoose.connection?.name;
+  const host = mongoose.connection?.host;
+  const collectionName = Submission.collection?.name;
+  console.log(`[debug] ${routeName} context`, {
+    dbName,
+    host,
+    collectionName,
+    ...details
   });
 }
 
@@ -204,6 +226,36 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get('/debug/submission/:id', async (req, res, next) => {
+  try {
+    if (!DEBUG_PAYMENTS) {
+      return res.status(404).json({ message: 'Not found.' });
+    }
+
+    const { id } = req.params;
+    const isValidObjectId = mongoose.Types.ObjectId.isValid(id);
+    const found = isValidObjectId
+      ? await Submission.findById(id).select('_id paymentStatus paymentId createdAt').lean()
+      : null;
+
+    return res.status(200).json({
+      data: {
+        id,
+        isValidObjectId,
+        found: Boolean(found),
+        submission: found || null,
+        connection: {
+          host: mongoose.connection?.host || null,
+          dbName: mongoose.connection?.name || null,
+          collectionName: Submission.collection?.name || null
+        }
+      }
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 app.get('/referral/validate', async (req, res, next) => {
@@ -351,6 +403,7 @@ app.get('/cohorts', async (_req, res, next) => {
 app.post('/submit', upload.single('dogphoto'), async (req, res, next) => {
   try {
     const { name, phoneno, address, city, mail, dogsname, referralCode } = req.body;
+    debugRequestContext('/submit', { mail, dogsname });
 
     if (!name || !phoneno || !address || !city || !mail || !dogsname) {
       return res.status(400).json({
@@ -375,22 +428,28 @@ app.post('/submit', upload.single('dogphoto'), async (req, res, next) => {
     }
 
     const uploadResult = await uploadToCloudinary(req.file.buffer);
-
-    const submission = await Submission.create({
-      name,
-      phoneno,
-      address,
-      city,
-      mail,
-      dogsname,
-      referredByCode: normalizedReferralCode,
-      dogphoto: {
-        publicId: uploadResult.public_id,
-        url: uploadResult.secure_url,
-        mimetype: req.file.mimetype,
-        size: req.file.size
-      }
-    });
+    let submission;
+    try {
+      submission = await Submission.create({
+        name,
+        phoneno,
+        address,
+        city,
+        mail,
+        dogsname,
+        referredByCode: normalizedReferralCode,
+        dogphoto: {
+          publicId: uploadResult.public_id,
+          url: uploadResult.secure_url,
+          mimetype: req.file.mimetype,
+          size: req.file.size
+        }
+      });
+    } catch (dbError) {
+      // DB insert failed after image upload: clean up uploaded asset.
+      await cloudinary.uploader.destroy(uploadResult.public_id, { resource_type: 'image' });
+      throw dbError;
+    }
 
     return res.status(201).json({
       message: 'Submission received successfully.',
@@ -410,6 +469,11 @@ app.post('/payment/success', async (req, res, next) => {
     }
 
     const { submissionId, razorpay_payment_id, razorpay_order_id } = req.body;
+    debugRequestContext('/payment/success', {
+      submissionId,
+      razorpay_payment_id,
+      razorpay_order_id
+    });
 
     if (!submissionId || !razorpay_payment_id) {
       return res.status(400).json({
@@ -417,9 +481,32 @@ app.post('/payment/success', async (req, res, next) => {
       });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(submissionId)) {
+      return res.status(400).json({
+        message: 'Invalid submissionId format.'
+      });
+    }
+
     const submission = await Submission.findById(submissionId);
+    debugRequestContext('/payment/success lookup', { found: Boolean(submission) });
     if (!submission) {
       return res.status(404).json({ message: 'Submission not found.' });
+    }
+
+    if (submission.paymentId && submission.paymentId !== razorpay_payment_id) {
+      return res.status(409).json({
+        message: 'This submission is already linked to a different payment.'
+      });
+    }
+
+    const paymentAlreadyUsed = await Submission.findOne({
+      _id: { $ne: submission._id },
+      paymentId: razorpay_payment_id
+    }).select('_id').lean();
+    if (paymentAlreadyUsed) {
+      return res.status(409).json({
+        message: 'This payment id is already used for another submission.'
+      });
     }
 
     const payment = await razorpayClient.payments.fetch(razorpay_payment_id);
@@ -434,11 +521,17 @@ app.post('/payment/success', async (req, res, next) => {
       });
     }
 
+    if (razorpay_order_id && payment.order_id && razorpay_order_id !== payment.order_id) {
+      return res.status(400).json({
+        message: 'Order id mismatch for this payment.'
+      });
+    }
+
     submission.paymentStatus = payment.status;
     submission.paymentId = razorpay_payment_id;
-    submission.paymentOrderId = razorpay_order_id || payment.order_id || null;
+    submission.paymentOrderId = payment.order_id || razorpay_order_id || null;
     if (!submission.paidAt) {
-      submission.paidAt = new Date();
+      submission.paidAt = payment.created_at ? new Date(payment.created_at * 1000) : new Date();
     }
 
     await assignCohortAndReferral(submission);
@@ -498,7 +591,8 @@ app.use((err, _req, res, _next) => {
     return res.status(400).json({ message: err.message });
   }
   if (err) {
-    return res.status(400).json({ message: err.message || 'Request failed.' });
+    const status = err.statusCode || err.status || 500;
+    return res.status(status).json({ message: err.message || 'Request failed.' });
   }
   return res.status(500).json({ message: 'Internal server error.' });
 });

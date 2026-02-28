@@ -137,4 +137,12 @@ submissionSchema.index(
   }
 );
 
+submissionSchema.index(
+  { paymentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { paymentId: { $type: 'string' } }
+  }
+);
+
 module.exports = mongoose.model('Submission', submissionSchema);
