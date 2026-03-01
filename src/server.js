@@ -225,21 +225,11 @@ async function processReferralUsage(submission) {
 }
 
 // Security headers — makes the server look legitimate to firewalls & autoblockers
+// CORS is handled entirely by nginx to avoid duplicate headers
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
-  contentSecurityPolicy: false // let the frontend control its own CSP
+  contentSecurityPolicy: false
 }));
-
-// CORS — handle preflight OPTIONS requests explicitly so firewalls don't drop them
-const corsOptions = {
-  origin: true,           // reflect the request origin (allows all, but properly)
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  optionsSuccessStatus: 204  // some old browsers choke on 200 for OPTIONS
-};
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // respond to all preflight checks
 
 app.use(express.json());
 
