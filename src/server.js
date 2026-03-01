@@ -14,6 +14,7 @@ const EnrollmentCounter = require('./models/EnrollmentCounter');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || 'localhost';
 const DEBUG_PAYMENTS = process.env.DEBUG_PAYMENTS === 'true';
 
 const COHORT_SIZE = 20;
@@ -673,6 +674,6 @@ app.use((err, _req, res, _next) => {
   return res.status(500).json({ message: 'Internal server error.' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Server running on http://${HOST}:${PORT}`);
 });
