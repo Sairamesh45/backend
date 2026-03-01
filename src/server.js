@@ -15,7 +15,7 @@ const EnrollmentCounter = require('./models/EnrollmentCounter');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || 'localhost';
+const HOST = process.env.HOST || '0.0.0.0';
 const DEBUG_PAYMENTS = process.env.DEBUG_PAYMENTS === 'true';
 
 const COHORT_SIZE = 20;
