@@ -3,6 +3,7 @@ require('dotenv').config();
 const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const multer = require('multer');
 const mongoose = require('mongoose');
 const Razorpay = require('razorpay');
@@ -223,7 +224,23 @@ async function processReferralUsage(submission) {
   };
 }
 
-app.use(cors());
+// Security headers — makes the server look legitimate to firewalls & autoblockers
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: false // let the frontend control its own CSP
+}));
+
+// CORS — handle preflight OPTIONS requests explicitly so firewalls don't drop them
+const corsOptions = {
+  origin: true,           // reflect the request origin (allows all, but properly)
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 204  // some old browsers choke on 200 for OPTIONS
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // respond to all preflight checks
+
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
