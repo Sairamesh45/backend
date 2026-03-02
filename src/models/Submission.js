@@ -122,6 +122,16 @@ const submissionSchema = new mongoose.Schema(
     confirmationSentAt: {
       type: Date,
       default: null
+    },
+    tier: {
+      type: String,
+      enum: ['starter', 'founding'],
+      default: 'starter'
+    },
+    amount: {
+      type: Number,
+      default: 500,
+      min: 0
     }
   },
   {

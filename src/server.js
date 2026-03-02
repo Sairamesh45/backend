@@ -21,6 +21,12 @@ const DEBUG_PAYMENTS = process.env.DEBUG_PAYMENTS === 'true';
 const COHORT_SIZE = 20;
 const ENROLLMENT_COUNTER_KEY = 'cohort_enrollment';
 
+const TIER_CONFIG = {
+  starter: { amount: 500, amountPaise: 50000, label: 'Starter Pack' },
+  founding: { amount: 2499, amountPaise: 249900, label: 'Founding Member' }
+};
+const VALID_TIERS = Object.keys(TIER_CONFIG);
+
 const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -352,7 +358,7 @@ app.get('/activity/live', async (req, res, next) => {
       paidAt: { $ne: null },
       cohortNumber: { $ne: null }
     })
-      .select('dogsname name city cohortNumber cohortPosition cohortSlot paidAt')
+      .select('dogsname name city cohortNumber cohortPosition cohortSlot tier amount paidAt')
       .sort({ paidAt: -1 })
       .limit(limit)
       .lean();
@@ -363,6 +369,8 @@ app.get('/activity/live', async (req, res, next) => {
       city: item.city,
       cohortNumber: item.cohortNumber,
       position: item.cohortPosition || item.cohortSlot,
+      tier: item.tier || 'starter',
+      amount: item.amount || 500,
       claimedAt: item.paidAt
     }));
 
@@ -411,8 +419,10 @@ app.get('/cohorts', async (_req, res, next) => {
 
 app.post('/submit', upload.single('dogphoto'), async (req, res, next) => {
   try {
-    const { name, phoneno, address, city, mail, dogsname, referralCode } = req.body;
-    debugRequestContext('/submit', { mail, dogsname });
+    const { name, phoneno, address, city, mail, dogsname, referralCode, tier: rawTier } = req.body;
+    const tier = VALID_TIERS.includes(rawTier) ? rawTier : 'starter';
+    const tierConfig = TIER_CONFIG[tier];
+    debugRequestContext('/submit', { mail, dogsname, tier });
 
     if (!name || !phoneno || !address || !city || !mail || !dogsname) {
       return res.status(400).json({
@@ -446,6 +456,8 @@ app.post('/submit', upload.single('dogphoto'), async (req, res, next) => {
         city,
         mail,
         dogsname,
+        tier,
+        amount: tierConfig.amount,
         referredByCode: normalizedReferralCode,
         dogphoto: {
           publicId: uploadResult.public_id,
@@ -531,6 +543,13 @@ app.post('/payment/success', async (req, res, next) => {
       });
     }
 
+    const expectedTier = TIER_CONFIG[submission.tier] || TIER_CONFIG.starter;
+    if (payment.amount && Number(payment.amount) !== expectedTier.amountPaise) {
+      return res.status(400).json({
+        message: `Payment amount mismatch. Expected ₹${expectedTier.amount} (${expectedTier.amountPaise} paise) but received ${payment.amount} paise.`
+      });
+    }
+
     if (razorpay_order_id && payment.order_id && razorpay_order_id !== payment.order_id) {
       return res.status(400).json({
         message: 'Order id mismatch for this payment.'
@@ -557,6 +576,7 @@ app.post('/payment/success', async (req, res, next) => {
       }
 
       const mailFrom = process.env.MAIL_FROM;
+      const tierLabel = TIER_CONFIG[submission.tier]?.label || 'Starter Pack';
       const subject = `🐾 Payment Confirmed – Welcome to the MyPerro Family, ${submission.dogsname}!`;
 
       const position = submission.cohortPosition || submission.cohortSlot || '';
@@ -571,6 +591,14 @@ app.post('/payment/success', async (req, res, next) => {
 
           <h3>Here's a summary of your order:</h3>
           <table style="border-collapse: collapse; width: 100%; max-width:600px;">
+            <tr>
+              <td style="padding:8px; border:1px solid #eee;"><strong>Pack</strong></td>
+              <td style="padding:8px; border:1px solid #eee;">${tierLabel}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px; border:1px solid #eee;"><strong>Amount Paid</strong></td>
+              <td style="padding:8px; border:1px solid #eee;">₹${submission.amount}</td>
+            </tr>
             <tr>
               <td style="padding:8px; border:1px solid #eee;"><strong>Dog's Name</strong></td>
               <td style="padding:8px; border:1px solid #eee;">${submission.dogsname}</td>
@@ -618,6 +646,8 @@ Hi ${submission.name},
 Great news — your payment was successful! We're thrilled to welcome ${submission.dogsname} to the MyPerro community.
 
 Order summary:
+Pack: ${tierLabel}
+Amount Paid: ₹${submission.amount}
 Dog's Name: ${submission.dogsname}
 Payment ID: ${razorpay_payment_id}
 Order ID: ${orderId}
