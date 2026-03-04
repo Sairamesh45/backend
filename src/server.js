@@ -419,14 +419,14 @@ app.get('/cohorts', async (_req, res, next) => {
 
 app.post('/submit', upload.single('dogphoto'), async (req, res, next) => {
   try {
-    const { name, phoneno, address, city, mail, dogsname, referralCode, tier: rawTier } = req.body;
+    const { name, phoneno, address, city, state, mail, dogsname, referralCode, tier: rawTier } = req.body;
     const tier = VALID_TIERS.includes(rawTier) ? rawTier : 'starter';
     const tierConfig = TIER_CONFIG[tier];
     debugRequestContext('/submit', { mail, dogsname, tier });
 
-    if (!name || !phoneno || !address || !city || !mail || !dogsname) {
+    if (!name || !phoneno || !address || !city || !state || !mail || !dogsname) {
       return res.status(400).json({
-        message: 'All fields are required: name, phoneno, address, city, mail, dogsname.'
+        message: 'All fields are required: name, phoneno, address, city, state, mail, dogsname.'
       });
     }
 
@@ -454,6 +454,7 @@ app.post('/submit', upload.single('dogphoto'), async (req, res, next) => {
         phoneno,
         address,
         city,
+        state,
         mail,
         dogsname,
         tier,
@@ -576,48 +577,79 @@ app.post('/payment/success', async (req, res, next) => {
       }
 
       const mailFrom = process.env.MAIL_FROM;
-      const tierLabel = TIER_CONFIG[submission.tier]?.label || 'Starter Pack';
+      const tierKey = submission.tier || 'starter';
+      const tierConfig = TIER_CONFIG[tierKey] || TIER_CONFIG.starter;
+      const tierLabel = tierConfig.label;
+      const tierAmount = submission.amount || tierConfig.amount;
+      const isFoundingMember = tierKey === 'founding';
       const subject = `🐾 Payment Confirmed – Welcome to the MyPerro Family, ${submission.dogsname}!`;
 
       const position = submission.cohortPosition || submission.cohortSlot || '';
       const orderId = submission.paymentOrderId || razorpay_order_id || '';
       const referralCodeFormatted = `${submission.dogsname || ''}-${position}`;
 
+      const tierBadgeColor = isFoundingMember ? '#7c3aed' : '#0ea5e9';
+      const tierBadgeBg = isFoundingMember ? '#f5f3ff' : '#f0f9ff';
+      const tierPerks = isFoundingMember
+        ? `<ul style="margin:8px 0; padding-left:20px; color:#444;">
+            <li>Founding Member badge &amp; lifetime recognition</li>
+            <li>Priority access to all future features</li>
+            <li>Exclusive Founding Member community</li>
+            <li>MyPerro GPS collar + premium accessories</li>
+          </ul>`
+        : `<ul style="margin:8px 0; padding-left:20px; color:#444;">
+            <li>MyPerro GPS collar</li>
+            <li>Access to the MyPerro app</li>
+            <li>Real-time tracking for ${submission.dogsname}</li>
+          </ul>`;
+
       const html = `
-        <div style="font-family: Arial, sans-serif; color: #222;">
+        <div style="font-family: Arial, sans-serif; color: #222; max-width:600px; margin:0 auto;">
           <h2>🐾 Payment Confirmed – Welcome to the MyPerro Family, ${submission.dogsname}!</h2>
           <p>Hi ${submission.name},</p>
           <p>Great news — your payment was successful! We're thrilled to welcome <strong>${submission.dogsname}</strong> to the MyPerro community.</p>
 
+          <!-- Tier & Amount Banner -->
+          <div style="background:${tierBadgeBg}; border:2px solid ${tierBadgeColor}; border-radius:10px; padding:16px 20px; margin:20px 0;">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+              <span style="background:${tierBadgeColor}; color:#fff; font-size:13px; font-weight:700; letter-spacing:1px; padding:4px 12px; border-radius:20px; text-transform:uppercase;">${tierLabel}</span>
+              <span style="font-size:28px; font-weight:800; color:${tierBadgeColor};">₹${tierAmount}</span>
+            </div>
+            <div style="margin-top:10px; font-size:14px; color:#555;">What's included in your <strong>${tierLabel}</strong>:</div>
+            ${tierPerks}
+          </div>
+
           <h3>Here's a summary of your order:</h3>
-          <table style="border-collapse: collapse; width: 100%; max-width:600px;">
-            <tr>
-              <td style="padding:8px; border:1px solid #eee;"><strong>Pack</strong></td>
-              <td style="padding:8px; border:1px solid #eee;">${tierLabel}</td>
+          <table style="border-collapse: collapse; width: 100%;">
+            <tr style="background:#f9f9f9;">
+              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Plan / Tier</td>
+              <td style="padding:8px 12px; border:1px solid #eee;">
+                <span style="background:${tierBadgeColor}; color:#fff; font-size:12px; font-weight:700; padding:2px 10px; border-radius:12px;">${tierLabel}</span>
+              </td>
             </tr>
             <tr>
-              <td style="padding:8px; border:1px solid #eee;"><strong>Amount Paid</strong></td>
-              <td style="padding:8px; border:1px solid #eee;">₹${submission.amount}</td>
+              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Amount Paid</td>
+              <td style="padding:8px 12px; border:1px solid #eee; font-weight:700; color:${tierBadgeColor};">₹${tierAmount}</td>
+            </tr>
+            <tr style="background:#f9f9f9;">
+              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Dog's Name</td>
+              <td style="padding:8px 12px; border:1px solid #eee;">${submission.dogsname}</td>
             </tr>
             <tr>
-              <td style="padding:8px; border:1px solid #eee;"><strong>Dog's Name</strong></td>
-              <td style="padding:8px; border:1px solid #eee;">${submission.dogsname}</td>
+              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Payment ID</td>
+              <td style="padding:8px 12px; border:1px solid #eee; font-size:13px; color:#555;">${razorpay_payment_id}</td>
+            </tr>
+            <tr style="background:#f9f9f9;">
+              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Order ID</td>
+              <td style="padding:8px 12px; border:1px solid #eee; font-size:13px; color:#555;">${orderId}</td>
             </tr>
             <tr>
-              <td style="padding:8px; border:1px solid #eee;"><strong>Payment ID</strong></td>
-              <td style="padding:8px; border:1px solid #eee;">${razorpay_payment_id}</td>
+              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Cohort</td>
+              <td style="padding:8px 12px; border:1px solid #eee;">${submission.cohortNumber || ''}</td>
             </tr>
-            <tr>
-              <td style="padding:8px; border:1px solid #eee;"><strong>Order ID</strong></td>
-              <td style="padding:8px; border:1px solid #eee;">${orderId}</td>
-            </tr>
-            <tr>
-              <td style="padding:8px; border:1px solid #eee;"><strong>Cohort</strong></td>
-              <td style="padding:8px; border:1px solid #eee;">${submission.cohortNumber || ''}</td>
-            </tr>
-            <tr>
-              <td style="padding:8px; border:1px solid #eee;"><strong>Position in Cohort</strong></td>
-              <td style="padding:8px; border:1px solid #eee;">${position}${position ? '/' + COHORT_SIZE : ''}</td>
+            <tr style="background:#f9f9f9;">
+              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Position in Cohort</td>
+              <td style="padding:8px 12px; border:1px solid #eee;">${position}${position ? '/' + COHORT_SIZE : ''}</td>
             </tr>
           </table>
 
@@ -645,13 +677,16 @@ Hi ${submission.name},
 
 Great news — your payment was successful! We're thrilled to welcome ${submission.dogsname} to the MyPerro community.
 
+━━━━━━━━━━━━━━━━━━━━━━━━
+Plan / Tier : ${tierLabel}
+Amount Paid : ₹${tierAmount}
+━━━━━━━━━━━━━━━━━━━━━━━━
+
 Order summary:
-Pack: ${tierLabel}
-Amount Paid: ₹${submission.amount}
-Dog's Name: ${submission.dogsname}
-Payment ID: ${razorpay_payment_id}
-Order ID: ${orderId}
-Cohort: ${submission.cohortNumber || ''}
+Dog's Name        : ${submission.dogsname}
+Payment ID        : ${razorpay_payment_id}
+Order ID          : ${orderId}
+Cohort            : ${submission.cohortNumber || ''}
 Position in Cohort: ${position}${position ? '/' + COHORT_SIZE : ''}
 
 Your Referral Code: ${referralCodeFormatted}

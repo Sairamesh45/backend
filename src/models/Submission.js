@@ -22,6 +22,11 @@ const submissionSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    state: {
+      type: String,
+      required: true,
+      trim: true
+    },
     mail: {
       type: String,
       required: true,
