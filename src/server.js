@@ -578,127 +578,108 @@ app.post('/payment/success', async (req, res, next) => {
 
       const mailFrom = process.env.MAIL_FROM;
       const tierKey = submission.tier || 'starter';
-      const tierConfig = TIER_CONFIG[tierKey] || TIER_CONFIG.starter;
-      const tierLabel = tierConfig.label;
-      const tierAmount = submission.amount || tierConfig.amount;
       const isFoundingMember = tierKey === 'founding';
-      const subject = `🐾 Payment Confirmed – Welcome to the MyPerro Family, ${submission.dogsname}!`;
-
       const position = submission.cohortPosition || submission.cohortSlot || '';
       const orderId = submission.paymentOrderId || razorpay_order_id || '';
       const referralCodeFormatted = `${submission.dogsname || ''}-${position}`;
 
-      const tierBadgeColor = isFoundingMember ? '#7c3aed' : '#0ea5e9';
-      const tierBadgeBg = isFoundingMember ? '#f5f3ff' : '#f0f9ff';
-      const tierPerks = isFoundingMember
-        ? `<ul style="margin:8px 0; padding-left:20px; color:#444;">
-            <li>Founding Member badge &amp; lifetime recognition</li>
-            <li>Priority access to all future features</li>
-            <li>Exclusive Founding Member community</li>
-            <li>MyPerro GPS collar + premium accessories</li>
-          </ul>`
-        : `<ul style="margin:8px 0; padding-left:20px; color:#444;">
-            <li>MyPerro GPS collar</li>
-            <li>Access to the MyPerro app</li>
-            <li>Real-time tracking for ${submission.dogsname}</li>
-          </ul>`;
+      const subject = `${submission.dogsname} is officially on the map - your order is confirmed!`;
+
+      const foundingBadge = isFoundingMember
+        ? `<div style="background:#f5f3ff; border:2px solid #7c3aed; border-radius:10px; padding:14px 18px; margin:20px 0; text-align:center;">
+            <span style="background:#7c3aed; color:#fff; font-size:12px; font-weight:700; letter-spacing:1px; padding:4px 14px; border-radius:20px; text-transform:uppercase;">Founding Member</span>
+            <p style="margin:10px 0 0; font-size:14px; color:#555;">You're among the first to bring MyPerro home. Thank you for believing in us from day one.</p>
+          </div>`
+        : '';
 
       const html = `
-        <div style="font-family: Arial, sans-serif; color: #222; max-width:600px; margin:0 auto;">
-          <h2>🐾 Payment Confirmed – Welcome to the MyPerro Family, ${submission.dogsname}!</h2>
-          <p>Hi ${submission.name},</p>
-          <p>Great news — your payment was successful! We're thrilled to welcome <strong>${submission.dogsname}</strong> to the MyPerro community.</p>
+        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; color: #222; max-width:600px; margin:0 auto; padding:24px;">
 
-          <!-- Tier & Amount Banner -->
-          <div style="background:${tierBadgeBg}; border:2px solid ${tierBadgeColor}; border-radius:10px; padding:16px 20px; margin:20px 0;">
-            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-              <span style="background:${tierBadgeColor}; color:#fff; font-size:13px; font-weight:700; letter-spacing:1px; padding:4px 12px; border-radius:20px; text-transform:uppercase;">${tierLabel}</span>
-              <span style="font-size:28px; font-weight:800; color:${tierBadgeColor};">₹${tierAmount}</span>
-            </div>
-            <div style="margin-top:10px; font-size:14px; color:#555;">What's included in your <strong>${tierLabel}</strong>:</div>
-            ${tierPerks}
+          <!-- Header -->
+          <div style="text-align:center; margin-bottom:28px;">
+            <h1 style="font-size:22px; font-weight:800; color:#111; margin:0 0 4px;">${submission.dogsname} is officially on the map.</h1>
+            <p style="font-size:14px; color:#888; margin:0;">Your order is confirmed!</p>
           </div>
 
-          <h3>Here's a summary of your order:</h3>
-          <table style="border-collapse: collapse; width: 100%;">
-            <tr style="background:#f9f9f9;">
-              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Plan / Tier</td>
-              <td style="padding:8px 12px; border:1px solid #eee;">
-                <span style="background:${tierBadgeColor}; color:#fff; font-size:12px; font-weight:700; padding:2px 10px; border-radius:12px;">${tierLabel}</span>
-              </td>
+          <!-- Intro -->
+          <p style="font-size:16px; line-height:1.6; color:#333;">Hi ${submission.name}, <strong>${submission.dogsname}</strong> just made it official${isFoundingMember ? ' as a Founding Member' : ''}.</p>
+          <p style="font-size:16px; line-height:1.6; color:#333;">Your payment went through, and your MyPerro GPS collar is now reserved, built to make sure <strong>${submission.dogsname}</strong> is always findable, always safe, always yours.${isFoundingMember ? ` As a Founding Member, <strong>${submission.dogsname}</strong> gets priority in every batch.` : ''}</p>
+
+          ${foundingBadge}
+
+          <!-- ORDER DETAILS -->
+          <h3 style="font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:#999; border-top:1px solid #eee; padding-top:22px; margin-top:28px;">Order Details</h3>
+          <table style="border-collapse:collapse; width:100%; font-size:15px;">
+            <tr>
+              <td style="padding:11px 14px; border:1px solid #e8e8e8; color:#666; width:45%;">Dog's Name</td>
+              <td style="padding:11px 14px; border:1px solid #e8e8e8; font-weight:600;">${submission.dogsname}</td>
+            </tr>
+            <tr style="background:#fafafa;">
+              <td style="padding:11px 14px; border:1px solid #e8e8e8; color:#666;">Payment ID</td>
+              <td style="padding:11px 14px; border:1px solid #e8e8e8; font-size:13px; color:#555;">${razorpay_payment_id}</td>
             </tr>
             <tr>
-              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Amount Paid</td>
-              <td style="padding:8px 12px; border:1px solid #eee; font-weight:700; color:${tierBadgeColor};">₹${tierAmount}</td>
+              <td style="padding:11px 14px; border:1px solid #e8e8e8; color:#666;">Order ID</td>
+              <td style="padding:11px 14px; border:1px solid #e8e8e8; font-size:13px; color:#555;">${orderId}</td>
             </tr>
-            <tr style="background:#f9f9f9;">
-              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Dog's Name</td>
-              <td style="padding:8px 12px; border:1px solid #eee;">${submission.dogsname}</td>
-            </tr>
-            <tr>
-              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Payment ID</td>
-              <td style="padding:8px 12px; border:1px solid #eee; font-size:13px; color:#555;">${razorpay_payment_id}</td>
-            </tr>
-            <tr style="background:#f9f9f9;">
-              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Order ID</td>
-              <td style="padding:8px 12px; border:1px solid #eee; font-size:13px; color:#555;">${orderId}</td>
+            <tr style="background:#fafafa;">
+              <td style="padding:11px 14px; border:1px solid #e8e8e8; color:#666;">Cohort</td>
+              <td style="padding:11px 14px; border:1px solid #e8e8e8;">${submission.cohortNumber || ''}</td>
             </tr>
             <tr>
-              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Cohort</td>
-              <td style="padding:8px 12px; border:1px solid #eee;">${submission.cohortNumber || ''}</td>
-            </tr>
-            <tr style="background:#f9f9f9;">
-              <td style="padding:8px 12px; border:1px solid #eee; font-weight:600;">Position in Cohort</td>
-              <td style="padding:8px 12px; border:1px solid #eee;">${position}${position ? '/' + COHORT_SIZE : ''}</td>
+              <td style="padding:11px 14px; border:1px solid #e8e8e8; color:#666;">Position in Cohort</td>
+              <td style="padding:11px 14px; border:1px solid #e8e8e8;">${position}${position ? '/' + COHORT_SIZE : ''}</td>
             </tr>
           </table>
 
-          <h3>🎁 Your Referral Code</h3>
-          <p>Share MyPerro with fellow dog lovers and earn rewards!</p>
-          <p style="font-size:18px; background:#f6f6f6; display:inline-block; padding:8px 12px; border-radius:4px;">${referralCodeFormatted}</p>
+          <!-- REFERRAL CODE -->
+          <h3 style="font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:#999; border-top:1px solid #eee; padding-top:22px; margin-top:28px;">Your Referral Code</h3>
+          <div style="text-align:center; margin:16px 0;">
+            <span style="font-size:22px; font-weight:800; letter-spacing:2px; background:#f6f6f6; padding:12px 24px; border-radius:8px; display:inline-block; color:#111;">${referralCodeFormatted}</span>
+          </div>
+          <p style="font-size:15px; color:#444; text-align:center;">Know another dog parent who'd love this? Share your code &mdash; the more you share, the bigger the gift waiting for you!</p>
 
-          <h3>What's Next?</h3>
-          <p>Your MyPerro GPS collar is being prepared. You'll receive a shipping confirmation email with tracking details as soon as your order is on its way.</p>
-          <p>In the meantime, feel free to explore our app to set up your account and get ready for ${submission.dogsname}'s first adventure.</p>
+          <!-- WHAT HAPPENS NOW -->
+          <h3 style="font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:#999; border-top:1px solid #eee; padding-top:22px; margin-top:28px;">What Happens Now?</h3>
+          <p style="font-size:15px; line-height:1.7; color:#444;">We'll add you to a WhatsApp group for <strong>${submission.dogsname}</strong>. All future updates, including shipping notices and batch announcements, will be posted there so you can follow progress in one place.</p>
 
-          <p>If you have any questions, don't hesitate to reach out to us at <a href="mailto:support@myperro.com">support@myperro.com</a>.</p>
+          <p style="font-size:15px; color:#444;">Got questions? Contact us at <a href="mailto:contact.us@myperro.in" style="color:#0ea5e9;">contact.us@myperro.in</a></p>
 
-          <p>Thank you for trusting MyPerro to keep ${submission.dogsname} safe. 🐶</p>
+          <p style="font-size:15px; color:#333; margin-top:24px;">Thank you,<br><strong>MyPerro Team.</strong></p>
 
-          <p>The MyPerro Team</p>
-
-          <p style="font-size:12px; color:#888;">© MyPerro — <a href="https://www.myperro.in">www.myperro.in</a></p>
+          <p style="font-size:12px; color:#aaa; border-top:1px solid #eee; padding-top:16px; margin-top:24px;">&copy; MyPerro &mdash; <a href="https://www.myperro.in" style="color:#aaa;">www.myperro.in</a></p>
         </div>
       `;
 
-      const text = `🐾 Payment Confirmed – Welcome to the MyPerro Family, ${submission.dogsname}!
+      const text = `${submission.dogsname} is officially on the map - your order is confirmed!
 
-Hi ${submission.name},
+Hi ${submission.name}, ${submission.dogsname} just made it official${isFoundingMember ? ' — as a Founding Member' : ''}.
 
-Great news — your payment was successful! We're thrilled to welcome ${submission.dogsname} to the MyPerro community.
+Your payment went through, and your MyPerro GPS collar is now reserved — built to make sure ${submission.dogsname} is always findable, always safe, always yours.${isFoundingMember ? ` As a Founding Member, ${submission.dogsname} gets priority in every batch.` : ''}
 
-━━━━━━━━━━━━━━━━━━━━━━━━
-Plan / Tier : ${tierLabel}
-Amount Paid : ₹${tierAmount}
-━━━━━━━━━━━━━━━━━━━━━━━━
+ORDER DETAILS
 
-Order summary:
-Dog's Name        : ${submission.dogsname}
-Payment ID        : ${razorpay_payment_id}
-Order ID          : ${orderId}
-Cohort            : ${submission.cohortNumber || ''}
-Position in Cohort: ${position}${position ? '/' + COHORT_SIZE : ''}
+Dog's Name        | ${submission.dogsname}
+Payment ID        | ${razorpay_payment_id}
+Order ID          | ${orderId}
+Cohort            | ${submission.cohortNumber || ''}
+Position in Cohort| ${position}${position ? '/' + COHORT_SIZE : ''}
 
-Your Referral Code: ${referralCodeFormatted}
+YOUR REFERRAL CODE
 
-What's Next?
-Your MyPerro GPS collar is being prepared. You'll receive a shipping confirmation email with tracking details as soon as your order is on its way.
+${referralCodeFormatted}
 
-If you have any questions, reach out to support@myperro.com.
+Know another dog parent who'd love this? Share your code — the more you share, the bigger the gift waiting for you!
 
-Thank you for trusting MyPerro to keep ${submission.dogsname} safe.
+WHAT HAPPENS NOW?
 
-The MyPerro Team
+We'll add you to a WhatsApp group for ${submission.dogsname}. All future updates, including shipping notices and batch announcements, will be posted there so you can follow progress in one place.
+
+Got questions? Contact us at contact.us@myperro.in
+
+Thank you,
+MyPerro Team.
+
 www.myperro.in`;
 
       sendMailInBackground({
