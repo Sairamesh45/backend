@@ -208,19 +208,61 @@ async function processReferralUsage(submission) {
 
   if (resendClient) {
     const mailFrom = process.env.MAIL_FROM;
-    const subject = 'Congrats! Your referral code was used';
+    const totalReferrals = updatedReferrer.referralUseCount;
+    const subject = `${submission.name} just used your referral code!`;
+
     const html = `
-      <h2>Referral Update</h2>
-      <p>Hi ${referrer.name},</p>
-      <p>Congrats, your referral code was used successfully.</p>
-      <p><strong>Total successful referrals:</strong> ${updatedReferrer.referralUseCount}</p>
+      <div style="font-family: 'Helvetica Neue', Arial, sans-serif; color: #222; max-width:600px; margin:0 auto; padding:24px;">
+
+        <!-- Header -->
+        <div style="text-align:center; margin-bottom:28px;">
+          <h1 style="font-size:22px; font-weight:800; color:#111; margin:0 0 4px;">Your referral code just worked!</h1>
+          <p style="font-size:14px; color:#888; margin:0;">Someone joined MyPerro through you.</p>
+        </div>
+
+        <p style="font-size:16px; line-height:1.6; color:#333;">Hi ${referrer.name},</p>
+        <p style="font-size:16px; line-height:1.6; color:#333;"><strong>${submission.name}</strong>${submission.dogsname ? ` (and ${submission.dogsname})` : ''} just signed up using your referral code. Your community is growing!</p>
+
+        <!-- Stats -->
+        <div style="background:#f0fdf4; border:2px solid #22c55e; border-radius:10px; padding:20px 24px; margin:24px 0; text-align:center;">
+          <p style="font-size:13px; color:#666; margin:0 0 6px; text-transform:uppercase; letter-spacing:1px;">Total Successful Referrals</p>
+          <p style="font-size:48px; font-weight:900; color:#16a34a; margin:0; line-height:1;">${totalReferrals}</p>
+          <p style="font-size:13px; color:#666; margin:8px 0 0;">people have joined through your code so far</p>
+        </div>
+
+        <p style="font-size:15px; line-height:1.7; color:#444;">Keep sharing your code — the more people you bring in, the bigger the reward waiting for you.</p>
+
+        <p style="font-size:15px; color:#444;">Got questions? Contact us at <a href="mailto:contact.us@myperro.in" style="color:#0ea5e9;">contact.us@myperro.in</a></p>
+
+        <p style="font-size:15px; color:#333; margin-top:24px;">Thank you,<br><strong>MyPerro Team.</strong></p>
+
+        <p style="font-size:12px; color:#aaa; border-top:1px solid #eee; padding-top:16px; margin-top:24px;">&copy; MyPerro &mdash; <a href="https://www.myperro.in" style="color:#aaa;">www.myperro.in</a></p>
+      </div>
     `;
+
+    const text = `Your referral code just worked!
+
+Hi ${referrer.name},
+
+${submission.name}${submission.dogsname ? ` (and ${submission.dogsname})` : ''} just signed up using your referral code. Your community is growing!
+
+Total Successful Referrals: ${totalReferrals}
+
+Keep sharing your code - the more people you bring in, the bigger the reward waiting for you.
+
+Got questions? Contact us at contact.us@myperro.in
+
+Thank you,
+MyPerro Team.
+
+www.myperro.in`;
 
     sendMailInBackground({
       from: mailFrom,
       to: referrer.mail,
       subject,
-      html
+      html,
+      text
     }, 'referral-used');
   }
 
