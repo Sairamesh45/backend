@@ -165,12 +165,34 @@ async function assignCohortAndReferral(submission) {
   const position = counterDoc.totalPaid;
   const cohortNumber = Math.ceil(position / COHORT_SIZE);
   const cohortSlot = ((position - 1) % COHORT_SIZE) + 1;
-  const referralCode = await generateUniqueReferralCode();
 
   submission.cohortNumber = cohortNumber;
   submission.cohortSlot = cohortSlot;
   submission.cohortPosition = cohortSlot;
-  submission.referralCode = referralCode;
+
+  // For captured payments we want a human-friendly referral code of the form "{dogname}-{cohortPosition}".
+  // For non-captured states (e.g., authorized) keep the legacy random code to avoid collisions during tentative payments.
+  if (String(submission.paymentStatus).toLowerCase() === 'captured') {
+    const rawName = submission.dogsname || submission.name || 'DOG';
+    const namePart = String(rawName)
+      .replace(/[^A-Za-z0-9]/g, '')
+      .substr(0, 40);
+    let baseCode = `${namePart}-${cohortSlot}`.toUpperCase();
+
+    // Ensure uniqueness by appending a numeric suffix if needed.
+    let finalCode = baseCode;
+    let suffix = 0;
+    // eslint-disable-next-line no-await-in-loop
+    while (await Submission.exists({ referralCode: finalCode })) {
+      suffix += 1;
+      finalCode = `${baseCode}-${suffix}`.toUpperCase();
+    }
+
+    submission.referralCode = finalCode;
+  } else {
+    submission.referralCode = await generateUniqueReferralCode();
+  }
+
   submission.referralAssignedAt = new Date();
 }
 
@@ -623,7 +645,7 @@ app.post('/payment/success', async (req, res, next) => {
       const isFoundingMember = tierKey === 'founding';
       const position = submission.cohortPosition || submission.cohortSlot || '';
       const orderId = submission.paymentOrderId || razorpay_order_id || '';
-      const referralCodeFormatted = `${submission.dogsname || ''}-${position}`;
+      const referralCodeFormatted = submission.referralCode || `${submission.dogsname || ''}-${position}`;
 
       const subject = `${submission.dogsname} is officially on the map - your order is confirmed!`;
 

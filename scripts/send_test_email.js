@@ -15,7 +15,7 @@ function buildEmail({ tier, submission, paymentId, orderId }) {
   const isFoundingMember = tierKey === 'founding';
 
   const position              = submission.cohortPosition || submission.cohortSlot || '';
-  const referralCodeFormatted = `${submission.dogsname || ''}-${position}`;
+  const referralCodeFormatted = submission.referralCode || `${submission.dogsname || ''}-${position}`;
 
   const subject = `[TEST – ${tierLabel}] ${submission.dogsname} is officially on the map - your order is confirmed!`;
 
